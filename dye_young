@@ -1,0 +1,138 @@
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+from rembg import remove
+from PIL import Image
+import os
+import pandas as pd
+
+def analyze_image(image_path, data_accumulator):
+    # Background removal
+    input_path = image_path
+    output_path = 'temp.tiff'
+    inp = Image.open(input_path)
+    output = remove(inp)
+    output.save(output_path)
+
+    # Load the image
+    image = cv2.imread(output_path)
+
+    # Convert image to HSV
+    hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+
+    # Define red color range
+    lower_red = np.array([0, 50, 50])
+    upper_red = np.array([10, 255, 255])
+    mask0 = cv2.inRange(hsv_image, lower_red, upper_red)
+
+    lower_red = np.array([170, 50, 50])
+    upper_red = np.array([180, 255, 255])
+    mask1 = cv2.inRange(hsv_image, lower_red, upper_red)
+
+    red_mask = mask0 + mask1
+
+    # Apply morphological operations to fill holes
+    kernel = np.ones((5, 5), np.uint8)
+    red_mask_closed = cv2.morphologyEx(red_mask, cv2.MORPH_CLOSE, kernel)
+
+    # Apply the mask to the original image
+    red_area = cv2.bitwise_and(image, image, mask=red_mask_closed)
+
+    # Convert BGR to RGB
+    red_pixels_rgb = cv2.cvtColor(red_area, cv2.COLOR_BGR2RGB)
+    red_pixels = red_pixels_rgb.reshape((-1, 3))
+
+    # Calculate the average R, G, and B values
+    average_R = np.mean(red_pixels[:, 0]) / 255.0
+    average_G = np.mean(red_pixels[:, 1]) / 255.0
+    average_B = np.mean(red_pixels[:, 2]) / 255.0
+
+    # Calculate M, m, and C
+    M = max(average_R, average_G, average_B)
+    m = min(average_R, average_G, average_B)
+    C = M - m
+
+    # Calculate L
+    L = (M + m) / 2
+
+    # Calculate H_star
+    if C == 0:
+        H_star = "undefined"
+    elif M == average_R:
+        H_star = ((average_G - average_B) / C) % 6
+    elif M == average_G:
+        H_star = ((average_B - average_R) / C) + 2
+    elif M == average_B:
+        H_star = ((average_R - average_G) / C) + 4
+
+    # Calculate H
+    if H_star == "undefined":
+        H = "undefined"
+    elif H_star <= 3:
+        H = 60 * H_star
+    else:
+        H = 60 * (H_star - 6)
+
+    # Calculate the area of the red region
+    red_pixel_count = np.sum(red_mask_closed > 0)
+    total_pixels = red_mask_closed.shape[0] * red_mask_closed.shape[1]
+    percentage_red_area = (red_pixel_count / total_pixels) * 100
+
+    # Append the data to the data accumulator
+    data_accumulator.append({
+        'Image Path': image_path,
+        'Average R value': average_R,
+        'Average G value': average_G,
+        'Average B value': average_B,
+        'M': M,
+        'm': m,
+        'C': C,
+        'L': L,
+        'H': H,
+        'Percentage of red area': percentage_red_area
+    })
+
+    # Clean up temporary file
+    os.remove(output_path)
+    
+    # Display the original image and the red area using matplotlib
+    plt.figure(figsize=(10, 5))
+
+    plt.subplot(1, 3, 1)
+    plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+    plt.title('Original Image')
+    plt.axis('off')
+
+    plt.subplot(1, 3, 2)
+    plt.imshow(red_pixels_rgb)
+    plt.title('Red Area')
+    plt.axis('off')
+
+    plt.subplot(1, 3, 3)
+    plt.imshow(red_mask_closed, cmap='gray')
+    plt.title('Red Mask with Holes')
+    plt.axis('off')
+
+# Path to the directory containing TIFF images
+input_folder = "/Users/user_name/Folder/"
+
+# Initialize data accumulator
+data_accumulator = []
+
+# Iterate over each image in the folder
+for filename in os.listdir(input_folder):
+    if filename.lower().endswith('.tiff') or filename.lower().endswith('.tif'):
+        image_path = os.path.join(input_folder, filename)
+        print(f"Processing image: {image_path}")
+        analyze_image(image_path, data_accumulator)
+    else:
+        print(f"Skipping file: {filename} (not a TIFF file)")
+
+# Create DataFrame from data accumulator
+df = pd.DataFrame(data_accumulator)
+
+# Export DataFrame to Excel
+output_excel_path = "/Users/user_name/folder/excel_output.xlsx"
+df.to_excel(output_excel_path, index=False)
+
+print(f"Excel file exported: {output_excel_path}")

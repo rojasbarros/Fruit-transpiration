@@ -1,0 +1,17 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: Python 3
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Pedro
+    family-names: Rojas-Barros
+    email: pprb88@gmail.com
+    affiliation: UW-Madison
+repository-code: 'https://github.com/rojasbarros/dye_assay'
+keywords:
+  - 'Acid fuschin '
